@@ -1,42 +1,43 @@
 const TelegramBot = require("node-telegram-bot-api");
 
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+const token = process.env.BOT_TOKEN;
+const bot = new TelegramBot(token, { polling: true });
 
-let movies = [];
+let movies = {}; // auto movie list
 
-// Detect movie uploads in channel
-bot.on("channel_post", (msg) => {
-  if (msg.video) {
-    movies.push({
-      title: msg.caption || `Movie ${movies.length + 1}`,
-      file_id: msg.video.file_id
-    });
-    console.log("Movie auto added");
-  }
-});
-
-// Show movies
-bot.onText(/\/movies/, (msg) => {
+bot.on("message", (msg) => {
   const chatId = msg.chat.id;
 
-  if (!movies.length) {
-    bot.sendMessage(chatId, "❌ No movies yet");
-    return;
+  // If video uploaded
+  if (msg.video && msg.caption) {
+    const title = msg.caption;
+    movies[title] = msg.video.file_id;
+
+    bot.sendMessage(chatId, `✅ Movie added: ${title}`);
   }
 
-  movies.forEach((movie, i) => {
-    bot.sendMessage(chatId, movie.title, {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "▶ Watch", callback_data: i.toString() }
-        ]]
-      }
-    });
-  });
+  // User command
+  if (msg.text === "/movies") {
+    const buttons = Object.keys(movies).map(m => ([{
+      text: m,
+      callback_data: m
+    }]));
+
+    if (buttons.length === 0) {
+      bot.sendMessage(chatId, "❌ No movies yet");
+    } else {
+      bot.sendMessage(chatId, "🎬 Select movie:", {
+        reply_markup: { inline_keyboard: buttons }
+      });
+    }
+  }
 });
 
-// Send movie
 bot.on("callback_query", (q) => {
-  const movie = movies[q.data];
-  bot.sendVideo(q.message.chat.id, movie.file_id);
+  const movie = q.data;
+  const chatId = q.message.chat.id;
+
+  if (movies[movie]) {
+    bot.sendVideo(chatId, movies[movie]);
+  }
 });
